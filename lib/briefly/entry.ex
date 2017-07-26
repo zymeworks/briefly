@@ -12,11 +12,22 @@ defmodule Briefly.Entry do
     GenServer.start_link(__MODULE__, :ok, [name: __MODULE__])
   end
 
+  def terminate(_, {_, ets} = state) do
+    case :ets.lookup(ets, pid) do
+      [{pid, _tmp, paths}] ->
+        :ets.delete(ets, pid)
+        Enum.each paths, &File.rm_rf/1
+      [] ->
+        :ok
+    end
+  end
+
   ## Callbacks
 
   @max_attempts 10
 
   def init(:ok) do
+    Process.flag(:trap_exit, true)
     tmp = Briefly.Config.directory
     cwd = Path.join(File.cwd!, "tmp")
     ets = :ets.new(:briefly, [:private])
