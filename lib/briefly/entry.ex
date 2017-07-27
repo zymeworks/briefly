@@ -12,14 +12,8 @@ defmodule Briefly.Entry do
     GenServer.start_link(__MODULE__, :ok, [name: __MODULE__])
   end
 
-  def terminate(_, {_, ets} = state) do
-    case :ets.lookup(ets, pid) do
-      [{pid, _tmp, paths}] ->
-        :ets.delete(ets, pid)
-        Enum.each paths, &File.rm_rf/1
-      [] ->
-        :ok
-    end
+  def terminate(_, {_, ets}) do
+    cleanup_pids(ets)
   end
 
   ## Callbacks
@@ -45,13 +39,7 @@ defmodule Briefly.Entry do
   end
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, {_, ets} = state) do
-    case :ets.lookup(ets, pid) do
-      [{pid, _tmp, paths}] ->
-        :ets.delete(ets, pid)
-        Enum.each paths, &File.rm_rf/1
-      [] ->
-        :ok
-    end
+    remove_files(ets, pid)
     {:noreply, state}
   end
 
@@ -135,4 +123,23 @@ defmodule Briefly.Entry do
   defp extname(%{extname: value}), do: value
   defp extname(_), do: Briefly.Config.default_extname
 
+  defp cleanup_pids(ets) do
+    first = :ets.first(ets)
+    cleanup_pids(ets, first)
+  end
+  defp cleanup_pids(_ets, :"$end_of_table"), do: :ok
+  defp cleanup_pids(ets, pid) do
+    remove_files(ets, pid)
+    cleanup_pids(ets, :ets.next(ets, pid))
+  end
+
+  defp remove_files(ets, pid) do
+    case :ets.lookup(ets, pid) do
+      [{pid, _tmp, paths}] ->
+        :ets.delete(ets, pid)
+        Enum.each paths, &File.rm_rf/1
+      [] ->
+        :ok
+    end
+  end
 end
